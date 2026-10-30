@@ -57,8 +57,10 @@ def _drain(sock, wait=0.0):
     return True
 
 
-def send(img, protocol=None):
-    """Send img to the printer; returns (bytes_sent, protocol used).
+def send(imgs, protocol=None):
+    """Send one image (or a list, each cut separately) over a single connection.
+
+    Returns (bytes_sent, protocol used).
 
     Data is paced (chunk size and delay are settings) and the connection is held
     open afterwards, because some printer network boards lose data that arrives
@@ -67,10 +69,13 @@ def send(img, protocol=None):
     if not config.PRINTER_HOST:
         raise RuntimeError("PRINTER_HOST is not set")
     protocol = protocol or config.PRINTER_PROTOCOL
-    payload = (encode_escpos if protocol == "escpos" else encode_starline)(img)
+    imgs = imgs if isinstance(imgs, (list, tuple)) else [imgs]
+    encode = encode_escpos if protocol == "escpos" else encode_starline
+    payload = b"".join(encode(i) for i in imgs)
     chunk, delay = config.PRINTER_CHUNK_BYTES, config.PRINTER_CHUNK_DELAY_MS / 1000
-    log.info("printer: encoded %dx%d image as %s, %d bytes; connecting to %s:%s "
-             "(chunk %dB, delay %dms, hold %ds)", img.size[0], img.size[1], protocol, len(payload),
+    log.info("printer: encoded %d receipt(s) %s as %s, %d bytes; connecting to %s:%s "
+             "(chunk %dB, delay %dms, hold %ds)", len(imgs), "+".join(f"{i.size[0]}x{i.size[1]}" for i in imgs),
+             protocol, len(payload),
              config.PRINTER_HOST, config.PRINTER_PORT, chunk, config.PRINTER_CHUNK_DELAY_MS,
              config.PRINTER_HOLD_SECONDS)
     t0 = time.time()

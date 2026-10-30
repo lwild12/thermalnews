@@ -38,10 +38,13 @@ def shorten(url):
         log.warning("sink: SINK_URL/SINK_TOKEN not set, using the full URL")
         return url
     t0 = time.time()
+    body = {"url": url, "tags": ["thermalnews"]}
+    if config.SINK_EXPIRY_DAYS > 0:
+        body["expiration"] = int(time.time()) + config.SINK_EXPIRY_DAYS * 86400  # unix seconds
     r = requests.post(
         f"{config.SINK_URL}/api/link/create",
         headers={"Authorization": f"Bearer {config.SINK_TOKEN}"},
-        json={"url": url, "tags": ["thermalnews"]},
+        json=body,
         timeout=15,
     )
     if not r.ok:
@@ -52,6 +55,7 @@ def shorten(url):
     link = data.get("link", data)
     short = data.get("shortLink") or (f"{config.SINK_URL}/{link['slug']}" if link.get("slug") else None)
     if short:
-        log.info("sink: HTTP %s %s -> %s in %.1fs", r.status_code, url[:70], short, time.time() - t0)
+        log.info("sink: HTTP %s %s -> %s in %.1fs (expires in %s)", r.status_code, url[:70], short,
+                 time.time() - t0, f"{config.SINK_EXPIRY_DAYS} days" if config.SINK_EXPIRY_DAYS > 0 else "never")
         return short
     raise ValueError(f"unexpected Sink response: {data}")

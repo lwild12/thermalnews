@@ -31,7 +31,7 @@ def _wrap(draw, text, font, width):
     return lines
 
 
-def render_receipt(items, header="NEWS DIGEST"):
+def render_receipt(items, header="NEWS DIGEST", show_source=True):
     """items: list of dicts with title, source, summary, short_url. Returns 1-bit image."""
     W, pad = config.PRINTER_WIDTH_DOTS, 12
     inner = W - 2 * pad
@@ -44,8 +44,9 @@ def render_receipt(items, header="NEWS DIGEST"):
 
     blocks = [("h1", header), ("small", time.strftime("%a %d %b %Y  %H:%M")), ("rule", "")]
     for it in items:
-        blocks += [("small", it["source"].upper()), ("h2", it["title"]),
-                   ("body", it["summary"]), ("qr", it["short_url"]),
+        if show_source:
+            blocks.append(("small", it["source"].upper()))
+        blocks += [("h2", it["title"]), ("body", it["summary"]), ("qr", it["short_url"]),
                    ("small", it["short_url"]), ("rule", "")]
 
     fonts = {"h1": h1, "h2": h2, "body": body, "small": small}
