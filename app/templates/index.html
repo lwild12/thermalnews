@@ -34,6 +34,29 @@
  <code>.env</code> values, with no restart needed. There is no login, so only expose this
  page on your own network.</small></p>
 
+ <fieldset><legend>Schedule</legend>
+  <label style="display:inline-block;margin-top:.2rem"><input type="checkbox" id="schedule_enabled" style="width:auto"> print automatically</label>
+  <label for="schedule_times">Times (24-hour, comma separated)</label>
+  <input id="schedule_times" placeholder="07:30, 18:00">
+  <label>Days</label>
+  <div id="days">
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="0" style="width:auto"> Mon</label>
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="1" style="width:auto"> Tue</label>
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="2" style="width:auto"> Wed</label>
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="3" style="width:auto"> Thu</label>
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="4" style="width:auto"> Fri</label>
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="5" style="width:auto"> Sat</label>
+   <label style="display:inline-block;margin-right:.7rem"><input type="checkbox" data-day="6" style="width:auto"> Sun</label>
+  </div>
+  <label for="schedule_timezone">Timezone</label>
+  <input id="schedule_timezone" placeholder="Europe/London">
+  <p><small>A scheduled run prints only stories not printed before, using the feed and layout settings below.
+  A run that is missed by more than 15 minutes (box off, or a job running) is skipped.</small></p>
+  <div class="actions"><button class="alt" data-test="schedule">Save &amp; check schedule</button></div>
+  <p class="msg" id="msg-schedule"></p>
+  <p><small id="sched_info"></small></p>
+ </fieldset>
+
  <fieldset><legend>Feeds &amp; stories</legend>
   <label for="feeds">RSS / Atom feed URLs (one per line)</label>
   <textarea id="feeds" rows="5" spellcheck="false" placeholder="https://feeds.bbci.co.uk/news/rss.xml"></textarea>
@@ -107,7 +130,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const FIELDS=['print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
+const FIELDS=['schedule_times','schedule_timezone','print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
 
 async function api(path,body){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
@@ -118,6 +141,11 @@ function say(id,ok,text){const m=$(id);m.className='msg '+(ok?'ok':'err');m.text
 
 function fill(s){
   FIELDS.forEach(f=>{ if(document.activeElement!==$(f)) $(f).value=s[f] });
+  $('schedule_enabled').checked=s.schedule_enabled;
+  document.querySelectorAll('[data-day]').forEach(c=>c.checked=s.schedule_days.includes(+c.dataset.day));
+  $('sched_info').textContent=(s.schedule.enabled?'Next: '+(s.schedule.next.join(' · ')||'none'):'Schedule is off')
+    +' · now '+s.schedule.now+' ('+s.schedule.timezone+')'
+    +(s.last_run?' · last run: '+s.last_run:'');
   $('token_state').textContent=s.sink_token_set?'(a token is saved)':'(none saved)';
   $('sink_token').value=''; $('clear_sink_token').checked=false;
   $('summary').textContent=s.feeds_count+(s.feeds_count===1?' feed':' feeds')+' · model '+s.ollama_model+' · printer '+(s.printer_host||'(not set)')+':'+s.printer_port+' ('+s.printer_protocol+')'
@@ -126,6 +154,8 @@ function fill(s){
 async function loadSettings(){fill(await (await fetch('/api/settings')).json())}
 function form(){
   const b={}; FIELDS.forEach(f=>b[f]=$(f).value);
+  b.schedule_enabled=$('schedule_enabled').checked;
+  b.schedule_days=[...document.querySelectorAll('[data-day]')].filter(c=>c.checked).map(c=>+c.dataset.day);
   b.sink_token=$('sink_token').value; b.clear_sink_token=$('clear_sink_token').checked; return b;
 }
 async function save(msgId){

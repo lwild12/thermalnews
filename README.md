@@ -91,6 +91,10 @@ Settings:
 | `OLLAMA_MODEL` | llama3.2 | model to summarise with |
 | `SINK_URL` / `SINK_TOKEN` | - | Sink base URL and site token; if unset the full URL is used |
 | `FEEDS` | BBC, Hacker News | comma-separated RSS/Atom URLs |
+| `SCHEDULE_ENABLED` | false | print automatically at the times below |
+| `SCHEDULE_TIMES` | 07:30 | comma-separated 24-hour times, e.g. `07:30,18:00` |
+| `SCHEDULE_DAYS` | 0,1,2,3,4,5,6 | days to run, 0 = Monday .. 6 = Sunday |
+| `SCHEDULE_TIMEZONE` | `TZ` or UTC | timezone the times are in, e.g. `Europe/London` |
 | `PRINT_MODE` | per_feed | `per_feed` = one printout (cut between) per feed; `combined` = everything in one printout |
 | `ITEMS_PER_FEED` | 3 | newest N stories per feed |
 | `LOG_LEVEL` | INFO | `DEBUG` also logs skipped stories, raw Sink responses and summaries |
@@ -120,6 +124,17 @@ The line under the page title shows the model and printer the running container 
 using, and you can also check with `docker compose exec thermalnews env | grep -E 'PRINTER|OLLAMA'`.
 
 ### 6. Use it
+
+**Scheduled printing** (Settings > Schedule): tick "print automatically", enter one or more
+times (24-hour, e.g. `07:30, 18:00`), pick the days and your timezone, then press
+**Save & check schedule**, which lists the next runs. The container usually runs in UTC, so
+set the timezone or "07:30" will fire at the wrong hour. A scheduled run does exactly what
+the button does (new stories only, your feed and layout settings) and shows up in the log and
+in "last run" on the Settings page. Each time fires at most once, even across restarts. If
+the box was off, or a job was already running, for more than 15 minutes past a time, that
+run is skipped rather than printing late. Saving a schedule never fires a time that has
+already passed today. The scheduler lives in the web process, so keep it to one worker as in
+the Dockerfile.
 
 **Settings** (the panel on the page) lets you change the feeds, how many stories to print
 and the print layout, the Ollama URL and model, the Sink URL, token and link expiry, and

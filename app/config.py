@@ -34,6 +34,14 @@ PRINTER_CHUNK_BYTES = int(os.environ.get("PRINTER_CHUNK_BYTES", "512"))
 PRINTER_CHUNK_DELAY_MS = int(os.environ.get("PRINTER_CHUNK_DELAY_MS", "15"))
 PRINTER_HOLD_SECONDS = int(os.environ.get("PRINTER_HOLD_SECONDS", "5"))  # keep connection open after sending
 
+# Scheduled printing (times are in SCHEDULE_TIMEZONE; days are 0=Mon .. 6=Sun)
+SCHEDULE_ENABLED = os.environ.get("SCHEDULE_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+SCHEDULE_TIMES = _list("SCHEDULE_TIMES", "07:30")
+SCHEDULE_DAYS = [int(d) for d in _list("SCHEDULE_DAYS", "0,1,2,3,4,5,6")]
+SCHEDULE_TIMEZONE = os.environ.get("SCHEDULE_TIMEZONE") or os.environ.get("TZ") or "UTC"
+SCHEDULE_TICK_SECONDS = int(os.environ.get("SCHEDULE_TICK_SECONDS", "20"))
+SCHEDULE_GRACE_MINUTES = int(os.environ.get("SCHEDULE_GRACE_MINUTES", "15"))  # skip runs missed by more than this
+
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 FONT_DIR = os.environ.get("FONT_DIR", "/usr/share/fonts/truetype/dejavu")
 
@@ -45,9 +53,11 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()  # DEBUG for full detail
 # Modules read config.X at call time, so apply() takes effect immediately.
 import json  # noqa: E402
 import logging  # noqa: E402
+import re  # noqa: E402
 import tempfile  # noqa: E402
 from pathlib import Path  # noqa: E402
 from urllib.parse import urlparse  # noqa: E402
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError  # noqa: E402
 
 _log = logging.getLogger("thermalnews.config")
 
@@ -57,6 +67,7 @@ EDITABLE = (
     "FEEDS", "ITEMS_PER_FEED", "MAX_AGE_HOURS", "MAX_STORIES", "PRINT_MODE",
     "PRINTER_HOST", "PRINTER_PORT", "PRINTER_PROTOCOL", "PRINTER_WIDTH_DOTS",
     "PRINTER_CHUNK_BYTES", "PRINTER_CHUNK_DELAY_MS", "PRINTER_HOLD_SECONDS",
+    "SCHEDULE_ENABLED", "SCHEDULE_TIMES", "SCHEDULE_DAYS", "SCHEDULE_TIMEZONE",
 )
 INT_RANGES = {
     "PRINTER_PORT": (1, 65535), "PRINTER_WIDTH_DOTS": (64, 2048),
@@ -66,7 +77,7 @@ INT_RANGES = {
     "MAX_AGE_HOURS": (1, 720), "MAX_STORIES": (0, 100),
 }
 MAX_FEEDS = 30
-ENV_DEFAULTS = {k: (list(globals()[k]) if k == "FEEDS" else globals()[k]) for k in EDITABLE}
+ENV_DEFAULTS = {k: (list(v) if isinstance(v, list) else v) for k, v in ((k, globals()[k]) for k in EDITABLE)}
 OVERRIDDEN = []  # keys currently coming from settings.json
 
 
@@ -88,6 +99,34 @@ def validate(raw):
             lo, hi = INT_RANGES[key]
             if not lo <= val <= hi:
                 raise ValueError(f"{key} must be between {lo} and {hi}")
+        elif key == "SCHEDULE_ENABLED":
+            val = val if isinstance(val, bool) else str(val).lower() in ("1", "true", "yes", "on")
+        elif key == "SCHEDULE_TIMES":
+            tokens = val if isinstance(val, list) else str(val).replace(",", " ").split()
+            times = set()
+            for t in (str(x).strip() for x in tokens):
+                m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", t)
+                if not m:
+                    raise ValueError(f"'{t}' is not a time; use 24-hour HH:MM, e.g. 07:30")
+                times.add(f"{int(m.group(1)):02d}:{m.group(2)}")
+            if len(times) > 12:
+                raise ValueError("at most 12 scheduled times")
+            val = sorted(times)
+        elif key == "SCHEDULE_DAYS":
+            tokens = val if isinstance(val, list) else str(val).replace(",", " ").split()
+            try:
+                days = sorted({int(d) for d in tokens})
+            except (TypeError, ValueError):
+                raise ValueError("SCHEDULE_DAYS must be numbers 0 (Mon) to 6 (Sun)")
+            if any(d < 0 or d > 6 for d in days):
+                raise ValueError("SCHEDULE_DAYS must be numbers 0 (Mon) to 6 (Sun)")
+            val = days
+        elif key == "SCHEDULE_TIMEZONE":
+            val = str(val).strip()
+            try:
+                ZoneInfo(val)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError(f"unknown timezone '{val}'; use a name like Europe/London")
         elif key == "FEEDS":
             items = val if isinstance(val, list) else str(val).replace(",", "\n").splitlines()
             val = []
