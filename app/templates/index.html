@@ -107,6 +107,9 @@
     <select id="printer_protocol"><option>starline</option><option>escpos</option></select></div>
    <div><label for="printer_width">Width (dots)</label><input id="printer_width" type="number" min="64" max="2048"></div>
   </div>
+  <label for="qr_module">QR code size (printer dots per square)</label>
+  <input id="qr_module" type="number" min="2" max="10">
+  <p><small>4 gives a code about 14mm wide for a typical short link (the old size was about 27mm). 3 saves a little more but was unreliable in my tests with light prints or blurry photos; 2 does not scan.</small></p>
   <details><summary><small>Advanced: sending speed</small></summary>
    <p><small>If prints stop part-way or come out garbled, the printer is losing data. Send smaller
    chunks, with a longer pause, and hold the connection open longer.</small></p>
@@ -130,7 +133,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const FIELDS=['schedule_times','schedule_timezone','print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
+const FIELDS=['qr_module','schedule_times','schedule_timezone','print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
 
 async function api(path,body){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
