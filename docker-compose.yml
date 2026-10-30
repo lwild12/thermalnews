@@ -1,7 +1,7 @@
 services:
   thermalnews:
     build: .
-    ports: ["8080:8080"]
+    ports: ["8185:8080"]
     volumes: ["./data:/data"]
     restart: unless-stopped
     env_file: .env        # copy .env.example to .env and edit
