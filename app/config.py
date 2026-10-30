@@ -34,6 +34,8 @@ QR_MODULE_DOTS = int(os.environ.get("QR_MODULE_DOTS", "4"))  # printer dots per 
 PRINTER_CHUNK_BYTES = int(os.environ.get("PRINTER_CHUNK_BYTES", "512"))
 PRINTER_CHUNK_DELAY_MS = int(os.environ.get("PRINTER_CHUNK_DELAY_MS", "15"))
 PRINTER_HOLD_SECONDS = int(os.environ.get("PRINTER_HOLD_SECONDS", "5"))  # keep connection open after sending
+# A printer that is busy printing or cutting stops reading for a while; only give up if it is silent this long.
+PRINTER_STALL_SECONDS = int(os.environ.get("PRINTER_STALL_SECONDS", "60"))
 
 # Scheduled printing (times are in SCHEDULE_TIMEZONE; days are 0=Mon .. 6=Sun)
 SCHEDULE_ENABLED = os.environ.get("SCHEDULE_ENABLED", "false").lower() in ("1", "true", "yes", "on")
@@ -67,13 +69,13 @@ EDITABLE = (
     "SINK_URL", "SINK_TOKEN", "SINK_EXPIRY_DAYS",
     "FEEDS", "ITEMS_PER_FEED", "MAX_AGE_HOURS", "MAX_STORIES", "PRINT_MODE",
     "PRINTER_HOST", "PRINTER_PORT", "PRINTER_PROTOCOL", "PRINTER_WIDTH_DOTS",
-    "PRINTER_CHUNK_BYTES", "PRINTER_CHUNK_DELAY_MS", "PRINTER_HOLD_SECONDS", "QR_MODULE_DOTS",
+    "PRINTER_CHUNK_BYTES", "PRINTER_CHUNK_DELAY_MS", "PRINTER_HOLD_SECONDS", "PRINTER_STALL_SECONDS", "QR_MODULE_DOTS",
     "SCHEDULE_ENABLED", "SCHEDULE_TIMES", "SCHEDULE_DAYS", "SCHEDULE_TIMEZONE",
 )
 INT_RANGES = {
     "PRINTER_PORT": (1, 65535), "PRINTER_WIDTH_DOTS": (64, 2048),
     "PRINTER_CHUNK_BYTES": (16, 65536), "PRINTER_CHUNK_DELAY_MS": (0, 1000),
-    "PRINTER_HOLD_SECONDS": (0, 120), "QR_MODULE_DOTS": (2, 10),
+    "PRINTER_HOLD_SECONDS": (0, 120), "PRINTER_STALL_SECONDS": (5, 600), "QR_MODULE_DOTS": (2, 10),
     "SINK_EXPIRY_DAYS": (0, 3650), "ITEMS_PER_FEED": (1, 20),
     "MAX_AGE_HOURS": (1, 720), "MAX_STORIES": (0, 100),
 }
