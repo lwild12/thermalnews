@@ -5,7 +5,7 @@ shorten the link with [Sink](https://github.com/ccbikai/Sink), and print the lot
 QR code per story) on a Star 80mm thermal printer over the network.
 
 ```
-RSS feeds -> Ollama (summary) -> Sink (short link + QR) -> bitmap receipt -> printer (TCP 9100)
+RSS feeds -> Ollama (summary) -> Sink (short link, printed as a small QR code) -> bitmap receipt -> printer (TCP 9100)
 ```
 
 ## What you need
@@ -85,6 +85,7 @@ Settings:
 | `PRINTER_PORT` | 9100 | printer port |
 | `PRINTER_PROTOCOL` | starline | `starline` or `escpos` (from step 2) |
 | `PRINTER_WIDTH_DOTS` | 576 | 576 for 80mm at 203dpi |
+| `QR_MODULE_DOTS` | 4 | size of each QR square in printer dots; 4 gives a code about 14mm wide (3 is smaller but less reliable, 2 won't scan) |
 | `PRINTER_CHUNK_BYTES` / `PRINTER_CHUNK_DELAY_MS` | 512 / 15 | send in chunks of this size with this pause between them |
 | `PRINTER_HOLD_SECONDS` | 5 | keep the connection open this long after sending |
 | `OLLAMA_URL` | http://localhost:11434 | Ollama base URL (use the real IP from inside Docker) |

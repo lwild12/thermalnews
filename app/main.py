@@ -224,6 +224,7 @@ FORM_KEYS = {
     "printer_hold": "PRINTER_HOLD_SECONDS", "sink_expiry": "SINK_EXPIRY_DAYS",
     "feeds": "FEEDS", "items_per_feed": "ITEMS_PER_FEED", "max_age": "MAX_AGE_HOURS",
     "max_stories": "MAX_STORIES", "print_mode": "PRINT_MODE",
+    "qr_module": "QR_MODULE_DOTS",
     "schedule_enabled": "SCHEDULE_ENABLED", "schedule_times": "SCHEDULE_TIMES",
     "schedule_days": "SCHEDULE_DAYS", "schedule_timezone": "SCHEDULE_TIMEZONE",
 }
