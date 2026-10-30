@@ -90,6 +90,7 @@ Settings:
 | `SINK_URL` / `SINK_TOKEN` | - | Sink base URL and site token; if unset the full URL is used |
 | `FEEDS` | BBC, Hacker News | comma-separated RSS/Atom URLs |
 | `ITEMS_PER_FEED` | 3 | newest N stories per feed |
+| `LOG_LEVEL` | INFO | `DEBUG` also logs skipped stories, raw Sink responses and summaries |
 | `MAX_AGE_HOURS` | 24 | ignore stories older than this |
 
 Note `localhost` inside a container is the container itself, so point `OLLAMA_URL` at
@@ -128,6 +129,19 @@ that file.
 If Ollama fails for a story it prints the feed's own text instead; if Sink fails it
 prints with the full URL. Summaries are based on the feed's text, not the full article.
 
+## Logs
+
+Everything the app does is logged to the container output, with timings: each feed
+fetch, each Ollama and Sink call (status, duration, result), the render, and the printer
+connection (host, port, protocol, bytes sent), plus every web request and full
+tracebacks on errors. The Sink token is never logged.
+
+```
+docker compose logs -f thermalnews
+```
+
+Set `LOG_LEVEL=DEBUG` in `.env` (then `docker compose up -d --force-recreate`) for more.
+
 ## Running without Docker
 
 ```
@@ -144,7 +158,8 @@ Keep it to one worker; job state is held in memory. The variables are the same a
 
 | Symptom | Likely cause |
 |---|---|
-| "Test print" fails with connection refused/timeout | wrong `PRINTER_HOST`, printer asleep/offline, or it does not accept raw 9100 (step 2) |
+| "Test print" fails with connection refused/timeout (see also `docker compose logs`) | wrong `PRINTER_HOST`, printer asleep/offline, or it does not accept raw 9100 (step 2) |
+| "Test print" says it sent but nothing prints | the printer accepted the connection but did not understand it: pick the other protocol in the drop-down next to the button and try again |
 | Prints garbage or a long strip of symbols | wrong `PRINTER_PROTOCOL`; try the other one |
 | Blank paper or text too small/wide | check `PRINTER_WIDTH_DOTS` matches your paper/model |
 | Log shows `ollama failed` | `OLLAMA_URL` unreachable from the container, or the model is not pulled |

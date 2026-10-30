@@ -13,7 +13,8 @@
 <p><small>{{ feeds|length }} feeds · model {{ model }} · printer {{ printer }}</small></p>
 <p><button id="go">Print the news</button>
  <button class="alt" id="dry">Preview only</button>
- <button class="alt" id="test">Test print</button></p>
+ <button class="alt" id="test">Test print</button>
+ <select id="proto"><option value="starline">starline</option><option value="escpos">escpos</option></select></p>
 <label><input type="checkbox" id="reprint"> include stories already printed</label>
 <pre id="log">Idle.</pre>
 <img id="pv" hidden>
@@ -33,7 +34,15 @@ async function poll(){
   else if(s.has_preview){$('pv').src='/preview.png?'+Date.now();$('pv').hidden=false}
 }
 $('go').onclick=()=>start(false); $('dry').onclick=()=>start(true);
-$('test').onclick=async()=>{const r=await fetch('/test',{method:'POST'});
-  $('log').textContent=r.ok?'Test sent.':'Test failed: '+(await r.json()).error};
+$('proto').value='{{ protocol }}';
+$('test').onclick=async()=>{
+  $('test').disabled=true; $('log').textContent='Sending test print ('+$('proto').value+')...';
+  try{
+    const r=await fetch('/test',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({protocol:$('proto').value})});
+    let d={}; try{d=await r.json()}catch(e){d={error:'server returned HTTP '+r.status}}
+    $('log').textContent=r.ok?d.message:'Test failed: '+d.error;
+  }catch(e){$('log').textContent='Test failed: could not reach the app ('+e+')'}
+  $('test').disabled=false};
 poll();
 </script></body></html>

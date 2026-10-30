@@ -28,3 +28,5 @@ PRINTER_WIDTH_DOTS = int(os.environ.get("PRINTER_WIDTH_DOTS", "576"))  # 80mm @ 
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 FONT_DIR = os.environ.get("FONT_DIR", "/usr/share/fonts/truetype/dejavu")
+
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()  # DEBUG for full detail

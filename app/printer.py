@@ -1,8 +1,12 @@
+import logging
 import socket
+import time
 
 from PIL import Image
 
 from . import config
+
+log = logging.getLogger("thermalnews.printer")
 
 
 def _raster_rows(img):
@@ -37,9 +41,23 @@ def encode_escpos(img):
     return bytes(out)
 
 
-def send(img):
+def send(img, protocol=None):
+    """Send img to the printer; returns (bytes_sent, protocol used)."""
     if not config.PRINTER_HOST:
         raise RuntimeError("PRINTER_HOST is not set")
-    payload = (encode_escpos if config.PRINTER_PROTOCOL == "escpos" else encode_starline)(img)
+    protocol = protocol or config.PRINTER_PROTOCOL
+    payload = (encode_escpos if protocol == "escpos" else encode_starline)(img)
+    log.info("printer: encoded %dx%d image as %s, %d bytes; connecting to %s:%s",
+             img.size[0], img.size[1], protocol, len(payload), config.PRINTER_HOST, config.PRINTER_PORT)
+    t0 = time.time()
     with socket.create_connection((config.PRINTER_HOST, config.PRINTER_PORT), timeout=10) as s:
+        log.info("printer: connected in %.2fs, sending", time.time() - t0)
         s.sendall(payload)
+        s.shutdown(socket.SHUT_WR)  # tell the printer there is no more data
+        s.settimeout(2)
+        try:
+            s.recv(1)  # give it a moment to drain before we close
+        except OSError:
+            pass
+    log.info("printer: sent %d bytes in %.2fs", len(payload), time.time() - t0)
+    return len(payload), protocol
