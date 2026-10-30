@@ -15,6 +15,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
 )
 log = logging.getLogger("thermalnews")
+
+
+class _QuietStatus(logging.Filter):
+    """Drop successful /status polls (one per second while a job runs) from gunicorn's access log."""
+
+    def filter(self, record):
+        msg = record.getMessage()
+        return not ('"GET /status ' in msg and '" 200 ' in msg)
+
+
+logging.getLogger("gunicorn.access").addFilter(_QuietStatus())
 log.info(
     "starting: printer=%s:%s protocol=%s width=%s | ollama=%s model=%s | sink=%s token=%s | "
     "%d feeds, %d/feed, max age %dh | data=%s log_level=%s",

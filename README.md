@@ -155,7 +155,8 @@ prints with the full URL. Summaries are based on the feed's text, not the full a
 Everything the app does is logged to the container output, with timings: each feed
 fetch, each Ollama and Sink call (status, duration, result), the render, and the printer
 connection (host, port, protocol, bytes sent), plus every web request and full
-tracebacks on errors. The Sink token is never logged.
+tracebacks on errors. The page's once-a-second `/status` polling is left out of the request
+log. The Sink token is never logged.
 
 ```
 docker compose logs -f thermalnews
