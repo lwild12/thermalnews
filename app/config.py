@@ -25,6 +25,10 @@ PRINTER_PORT = int(os.environ.get("PRINTER_PORT", "9100"))
 # "starline" (TSP100 default mode) or "escpos"
 PRINTER_PROTOCOL = os.environ.get("PRINTER_PROTOCOL", "starline").lower()
 PRINTER_WIDTH_DOTS = int(os.environ.get("PRINTER_WIDTH_DOTS", "576"))  # 80mm @ 203dpi
+# Pacing: some printers drop data if it arrives faster than the head prints it.
+PRINTER_CHUNK_BYTES = int(os.environ.get("PRINTER_CHUNK_BYTES", "512"))
+PRINTER_CHUNK_DELAY_MS = int(os.environ.get("PRINTER_CHUNK_DELAY_MS", "15"))
+PRINTER_HOLD_SECONDS = int(os.environ.get("PRINTER_HOLD_SECONDS", "5"))  # keep connection open after sending
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 FONT_DIR = os.environ.get("FONT_DIR", "/usr/share/fonts/truetype/dejavu")
@@ -47,7 +51,13 @@ EDITABLE = (
     "OLLAMA_URL", "OLLAMA_MODEL",
     "SINK_URL", "SINK_TOKEN",
     "PRINTER_HOST", "PRINTER_PORT", "PRINTER_PROTOCOL", "PRINTER_WIDTH_DOTS",
+    "PRINTER_CHUNK_BYTES", "PRINTER_CHUNK_DELAY_MS", "PRINTER_HOLD_SECONDS",
 )
+INT_RANGES = {
+    "PRINTER_PORT": (1, 65535), "PRINTER_WIDTH_DOTS": (64, 2048),
+    "PRINTER_CHUNK_BYTES": (16, 65536), "PRINTER_CHUNK_DELAY_MS": (0, 1000),
+    "PRINTER_HOLD_SECONDS": (0, 120),
+}
 ENV_DEFAULTS = {k: globals()[k] for k in EDITABLE}
 OVERRIDDEN = []  # keys currently coming from settings.json
 
@@ -62,12 +72,12 @@ def validate(raw):
     for key, val in raw.items():
         if key not in EDITABLE:
             raise ValueError(f"unknown setting {key}")
-        if key in ("PRINTER_PORT", "PRINTER_WIDTH_DOTS"):
+        if key in INT_RANGES:
             try:
                 val = int(val)
             except (TypeError, ValueError):
                 raise ValueError(f"{key} must be a number")
-            lo, hi = (1, 65535) if key == "PRINTER_PORT" else (64, 2048)
+            lo, hi = INT_RANGES[key]
             if not lo <= val <= hi:
                 raise ValueError(f"{key} must be between {lo} and {hi}")
         else:

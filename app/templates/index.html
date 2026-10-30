@@ -63,6 +63,15 @@
     <select id="printer_protocol"><option>starline</option><option>escpos</option></select></div>
    <div><label for="printer_width">Width (dots)</label><input id="printer_width" type="number" min="64" max="2048"></div>
   </div>
+  <details><summary><small>Advanced: sending speed</small></summary>
+   <p><small>If prints stop part-way or come out garbled, the printer is losing data. Send smaller
+   chunks, with a longer pause, and hold the connection open longer.</small></p>
+   <div class="row">
+    <div><label for="printer_chunk">Chunk (bytes)</label><input id="printer_chunk" type="number" min="16" max="65536"></div>
+    <div><label for="printer_delay">Pause (ms)</label><input id="printer_delay" type="number" min="0" max="1000"></div>
+    <div><label for="printer_hold">Hold open (s)</label><input id="printer_hold" type="number" min="0" max="120"></div>
+   </div>
+  </details>
   <div class="actions"><button class="alt" data-test="printer">Save &amp; test print</button></div>
   <p class="msg" id="msg-printer"></p>
   <p><small>If the test says it sent but nothing prints, switch protocol and try again.</small></p>
@@ -77,7 +86,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const FIELDS=['ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width'];
+const FIELDS=['ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
 
 async function api(path,body){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
