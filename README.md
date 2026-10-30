@@ -70,7 +70,14 @@ address of your instance, e.g. `https://s.example.com` (no trailing path).
 
 ### 5. Configure and run
 
-Edit `docker-compose.yml`:
+Copy the example settings file and edit it (`.env` is git-ignored, so your Sink token
+stays out of version control):
+
+```
+cp .env.example .env
+```
+
+Settings:
 
 | Var | Default | Meaning |
 |---|---|---|
@@ -117,12 +124,11 @@ prints with the full URL. Summaries are based on the feed's text, not the full a
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 sudo apt install fonts-dejavu-core        # receipt font
-export PRINTER_HOST=192.168.1.50 OLLAMA_URL=http://192.168.1.10:11434 DATA_DIR=./data
+set -a; . ./.env; set +a; export DATA_DIR=./data
 gunicorn -b 0.0.0.0:8080 -w 1 --threads 4 --timeout 300 app.main:app
 ```
 
-Keep it to one worker; job state is held in memory. Set the other variables from the
-table above as needed.
+Keep it to one worker; job state is held in memory. The variables are the same as in the table above.
 
 ## Troubleshooting
 
