@@ -25,6 +25,9 @@ log.info(
 )
 for f in config.FEEDS:
     log.info("feed configured: %s", f)
+if config.OVERRIDDEN:
+    log.info("settings from %s override the environment for: %s",
+             config.settings_path(), ", ".join(config.OVERRIDDEN))
 
 _lock = threading.Lock()
 state = {"running": False, "log": [], "finished": None}
@@ -107,9 +110,7 @@ def run_job(reprint, dry_run):
 
 @app.get("/")
 def index():
-    return render_template("index.html", feeds=config.FEEDS, model=config.OLLAMA_MODEL,
-                           printer=config.PRINTER_HOST or "(not set)",
-                           protocol=config.PRINTER_PROTOCOL)
+    return render_template("index.html")
 
 
 @app.post("/print")
@@ -161,3 +162,93 @@ def test():
     except Exception as e:
         log.exception("test print failed")
         return jsonify(error=f"{target}: {e}"), 500
+
+
+# --- settings API ------------------------------------------------------------
+FORM_KEYS = {
+    "ollama_url": "OLLAMA_URL", "ollama_model": "OLLAMA_MODEL",
+    "sink_url": "SINK_URL", "sink_token": "SINK_TOKEN",
+    "printer_host": "PRINTER_HOST", "printer_port": "PRINTER_PORT",
+    "printer_protocol": "PRINTER_PROTOCOL", "printer_width": "PRINTER_WIDTH_DOTS",
+}
+
+
+def current_settings():
+    out = {form: getattr(config, key) for form, key in FORM_KEYS.items() if form != "sink_token"}
+    out["sink_token_set"] = bool(config.SINK_TOKEN)  # the token itself never goes to the browser
+    out["overridden"] = list(config.OVERRIDDEN)
+    out["feeds"] = len(config.FEEDS)
+    return out
+
+
+@app.get("/api/settings")
+def get_settings():
+    return jsonify(current_settings())
+
+
+@app.post("/api/settings")
+def save_settings():
+    body = request.get_json(silent=True) or {}
+    raw = {FORM_KEYS[k]: v for k, v in body.items() if k in FORM_KEYS}
+    # token: blank = keep what is saved; clear_sink_token removes it
+    if not raw.get("SINK_TOKEN"):
+        raw.pop("SINK_TOKEN", None)
+    if body.get("clear_sink_token"):
+        raw["SINK_TOKEN"] = ""
+    try:
+        clean = config.validate(raw)
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    if state["running"]:
+        return jsonify(error="a print job is running; try again when it finishes"), 409
+    try:
+        config.save_overrides(clean)
+    except OSError as e:
+        log.exception("could not save settings")
+        return jsonify(error=f"could not write {config.settings_path()}: {e}"), 500
+    log.info("settings saved from %s: %s", request.remote_addr,
+             ", ".join(f"{k}={'***' if k == 'SINK_TOKEN' else v}" for k, v in clean.items()))
+    return jsonify(current_settings())
+
+
+@app.post("/api/settings/reset")
+def reset_settings():
+    if state["running"]:
+        return jsonify(error="a print job is running; try again when it finishes"), 409
+    config.reset_overrides()
+    log.info("settings reset to environment values by %s", request.remote_addr)
+    return jsonify(current_settings())
+
+
+@app.post("/api/test/ollama")
+def test_ollama():
+    """Check Ollama is reachable and the model is pulled (GET /api/tags)."""
+    import requests
+    t0 = time.time()
+    try:
+        r = requests.get(f"{config.OLLAMA_URL}/api/tags", timeout=10)
+        r.raise_for_status()
+        names = [m.get("name", "") for m in r.json().get("models", [])]
+    except Exception as e:
+        log.error("ollama test failed: %s", e)
+        return jsonify(error=f"{config.OLLAMA_URL}: {e}"), 502
+    want = config.OLLAMA_MODEL
+    found = want in names or f"{want}:latest" in names
+    log.info("ollama test: %s reachable in %.1fs, %d models, %r %s",
+             config.OLLAMA_URL, time.time() - t0, len(names), want, "found" if found else "MISSING")
+    if not found:
+        return jsonify(error=f"Ollama is reachable but model '{want}' is not pulled. "
+                             f"Available: {', '.join(names) or 'none'}. Run: ollama pull {want}"), 404
+    return jsonify(message=f"Ollama OK at {config.OLLAMA_URL}; model '{want}' is available.")
+
+
+@app.post("/api/test/sink")
+def test_sink():
+    """Create one real short link, so it proves the URL and token work."""
+    if not (config.SINK_URL and config.SINK_TOKEN):
+        return jsonify(error="Sink URL and token are both needed"), 400
+    try:
+        short = services.shorten("https://example.com/thermalnews-test")
+    except Exception as e:
+        return jsonify(error=f"{config.SINK_URL}: {e}"), 502
+    return jsonify(message=f"Sink OK: created {short} (a test link now exists in Sink).")

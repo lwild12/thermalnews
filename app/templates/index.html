@@ -3,23 +3,127 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Thermal News</title>
 <style>
- body{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem;color:#222}
+ body{font-family:system-ui,sans-serif;max-width:680px;margin:2rem auto;padding:0 1rem;color:#222}
  button{font-size:1.2rem;padding:.8rem 1.4rem;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
  button:disabled{opacity:.5} button.alt{background:#666;font-size:.9rem;padding:.5rem .9rem}
  pre{background:#f4f4f4;padding:1rem;border-radius:8px;min-height:6rem;white-space:pre-wrap}
  img{max-width:100%;border:1px solid #ccc} small{color:#666}
+ details{margin:1.5rem 0;border:1px solid #ddd;border-radius:8px;padding:.6rem 1rem}
+ summary{cursor:pointer;font-weight:600}
+ fieldset{border:1px solid #ddd;border-radius:8px;margin:1rem 0;padding:.6rem 1rem 1rem}
+ legend{font-weight:600;padding:0 .4rem}
+ label{display:block;margin:.6rem 0 .2rem;font-size:.9rem;color:#444}
+ input,select{width:100%;box-sizing:border-box;padding:.5rem;font-size:1rem;border:1px solid #bbb;border-radius:6px}
+ .row{display:flex;gap:.8rem}.row>div{flex:1}
+ .msg{min-height:1.2rem;font-size:.9rem;margin:.6rem 0 0;white-space:pre-wrap}
+ .ok{color:#0a6b2d}.err{color:#b00020}
+ .actions{margin-top:.8rem;display:flex;gap:.5rem;flex-wrap:wrap}
 </style></head><body>
 <h1>Thermal News</h1>
-<p><small>{{ feeds|length }} feeds · model {{ model }} · printer {{ printer }}</small></p>
+<p><small id="summary">loading settings...</small></p>
 <p><button id="go">Print the news</button>
- <button class="alt" id="dry">Preview only</button>
- <button class="alt" id="test">Test print</button>
- <select id="proto"><option value="starline">starline</option><option value="escpos">escpos</option></select></p>
-<label><input type="checkbox" id="reprint"> include stories already printed</label>
+ <button class="alt" id="dry">Preview only</button></p>
+<label style="display:inline"><input type="checkbox" id="reprint" style="width:auto"> include stories already printed</label>
 <pre id="log">Idle.</pre>
 <img id="pv" hidden>
+
+<details id="settings">
+ <summary>Settings</summary>
+ <p><small>Saved to <code>settings.json</code> in the data volume and used instead of the
+ <code>.env</code> values, with no restart needed. There is no login, so only expose this
+ page on your own network.</small></p>
+
+ <fieldset><legend>Ollama</legend>
+  <label for="ollama_url">URL</label>
+  <input id="ollama_url" placeholder="http://192.168.1.10:11434">
+  <label for="ollama_model">Model</label>
+  <input id="ollama_model" placeholder="llama3.2">
+  <div class="actions"><button class="alt" data-test="ollama">Save &amp; test Ollama</button></div>
+  <p class="msg" id="msg-ollama"></p>
+ </fieldset>
+
+ <fieldset><legend>Sink (short links)</legend>
+  <label for="sink_url">URL</label>
+  <input id="sink_url" placeholder="https://s.example.com (blank = use full URLs)">
+  <label for="sink_token">Site token <small id="token_state"></small></label>
+  <input id="sink_token" type="password" autocomplete="new-password" placeholder="leave blank to keep the saved token">
+  <label style="display:inline-block"><input type="checkbox" id="clear_sink_token" style="width:auto"> remove saved token</label>
+  <div class="actions"><button class="alt" data-test="sink">Save &amp; test Sink</button></div>
+  <p class="msg" id="msg-sink"></p>
+  <p><small>The test creates one real link (to example.com) in Sink.</small></p>
+ </fieldset>
+
+ <fieldset><legend>Printer</legend>
+  <div class="row">
+   <div><label for="printer_host">IP / hostname</label><input id="printer_host" placeholder="192.168.1.50"></div>
+   <div><label for="printer_port">Port</label><input id="printer_port" type="number" min="1" max="65535"></div>
+  </div>
+  <div class="row">
+   <div><label for="printer_protocol">Protocol</label>
+    <select id="printer_protocol"><option>starline</option><option>escpos</option></select></div>
+   <div><label for="printer_width">Width (dots)</label><input id="printer_width" type="number" min="64" max="2048"></div>
+  </div>
+  <div class="actions"><button class="alt" data-test="printer">Save &amp; test print</button></div>
+  <p class="msg" id="msg-printer"></p>
+  <p><small>If the test says it sent but nothing prints, switch protocol and try again.</small></p>
+ </fieldset>
+
+ <div class="actions">
+  <button class="alt" id="save">Save settings</button>
+  <button class="alt" id="reset">Reset to .env values</button>
+ </div>
+ <p class="msg" id="msg-general"></p>
+</details>
+
 <script>
 const $=id=>document.getElementById(id);
+const FIELDS=['ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width'];
+
+async function api(path,body){
+  const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  let d={}; try{d=await r.json()}catch(e){d={error:'server returned HTTP '+r.status}}
+  return {ok:r.ok,d};
+}
+function say(id,ok,text){const m=$(id);m.className='msg '+(ok?'ok':'err');m.textContent=text}
+
+function fill(s){
+  FIELDS.forEach(f=>{ if(document.activeElement!==$(f)) $(f).value=s[f] });
+  $('token_state').textContent=s.sink_token_set?'(a token is saved)':'(none saved)';
+  $('sink_token').value=''; $('clear_sink_token').checked=false;
+  $('summary').textContent=s.feeds+(s.feeds===1?' feed':' feeds')+' · model '+s.ollama_model+' · printer '+(s.printer_host||'(not set)')+':'+s.printer_port+' ('+s.printer_protocol+')'
+    +(s.overridden.length?' · settings saved in UI':'');
+}
+async function loadSettings(){fill(await (await fetch('/api/settings')).json())}
+function form(){
+  const b={}; FIELDS.forEach(f=>b[f]=$(f).value);
+  b.sink_token=$('sink_token').value; b.clear_sink_token=$('clear_sink_token').checked; return b;
+}
+async function save(msgId){
+  const {ok,d}=await api('/api/settings',form());
+  if(!ok){say(msgId,false,'Not saved: '+d.error);return false}
+  fill(d); return true;
+}
+
+$('save').onclick=async()=>{ if(await save('msg-general')) say('msg-general',true,'Saved.') };
+$('reset').onclick=async()=>{
+  if(!confirm('Discard saved settings and go back to the values in .env?'))return;
+  const {ok,d}=await api('/api/settings/reset');
+  if(ok){fill(d);say('msg-general',true,'Reset to .env values.')} else say('msg-general',false,d.error);
+};
+document.querySelectorAll('[data-test]').forEach(btn=>btn.onclick=async()=>{
+  const kind=btn.dataset.test, id='msg-'+kind;
+  btn.disabled=true; say(id,true,'Saving...');
+  try{
+    if(!await save(id)) return;
+    say(id,true,'Testing...');
+    const {ok,d}=kind==='printer'
+      ? await api('/test',{protocol:$('printer_protocol').value})
+      : await api('/api/test/'+kind);
+    say(id,ok,ok?d.message:'Failed: '+d.error);
+  }catch(e){say(id,false,'Could not reach the app ('+e+')')}
+  finally{btn.disabled=false}
+});
+
 async function start(dry){
   const r=await fetch('/print',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({reprint:$('reprint').checked,dry_run:dry})});
@@ -28,21 +132,11 @@ async function start(dry){
 }
 async function poll(){
   const s=await (await fetch('/status')).json();
-  $('log').textContent=s.log.join('\n')||'Working...';
-  ['go','dry','test'].forEach(i=>$(i).disabled=s.running);
+  $('log').textContent=s.log.join('\n')||(s.running?'Working...':'Idle.');
+  ['go','dry'].forEach(i=>$(i).disabled=s.running);
   if(s.running) setTimeout(poll,1000);
   else if(s.has_preview){$('pv').src='/preview.png?'+Date.now();$('pv').hidden=false}
 }
 $('go').onclick=()=>start(false); $('dry').onclick=()=>start(true);
-$('proto').value='{{ protocol }}';
-$('test').onclick=async()=>{
-  $('test').disabled=true; $('log').textContent='Sending test print ('+$('proto').value+')...';
-  try{
-    const r=await fetch('/test',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({protocol:$('proto').value})});
-    let d={}; try{d=await r.json()}catch(e){d={error:'server returned HTTP '+r.status}}
-    $('log').textContent=r.ok?d.message:'Test failed: '+d.error;
-  }catch(e){$('log').textContent='Test failed: could not reach the app ('+e+')'}
-  $('test').disabled=false};
-poll();
+loadSettings(); poll();
 </script></body></html>
