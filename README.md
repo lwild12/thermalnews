@@ -104,7 +104,7 @@ docker compose up -d --build
 
 Open `http://<box-ip>:8185` (the host port is set in `docker-compose.yml`).
 
-**Changed `.env` later?** `docker compose restart` does not re-read it. Recreate the
+**Changed `.env` later?** (Settings saved in the web page take priority over `.env`; reset them there first.) `docker compose restart` does not re-read it. Recreate the
 container instead:
 
 ```
@@ -115,6 +115,15 @@ The line under the page title shows the model and printer the running container 
 using, and you can also check with `docker compose exec thermalnews env | grep -E 'PRINTER|OLLAMA'`.
 
 ### 6. Use it
+
+**Settings** (the panel on the page) lets you change the Ollama URL and model, the Sink
+URL and token, and the printer IP, port, protocol and width without editing files or
+restarting. Each section has a **Save & test** button: Ollama checks the server is up and
+the model is pulled, Sink creates one real test link, and the printer sends a test page.
+Saved values go in `settings.json` inside the data volume (`./data`, file mode 600),
+and **override `.env`**; "Reset to .env values" deletes them. The Sink token is never sent
+back to the browser (leave the field blank to keep it). Feeds and the other options are
+still set in `.env`.
 
 - **Test print** sends a small test page to the printer.
 - **Preview only** runs the whole pipeline (feeds, Ollama, Sink) and shows the receipt
@@ -167,5 +176,6 @@ Keep it to one worker; job state is held in memory. The variables are the same a
 | "nothing new to print" | everything was already printed; tick the reprint box, raise `MAX_AGE_HOURS`, or check `FEEDS` |
 | Text missing accents/emoji | the font lacks the glyph; the app uses DejaVu Sans |
 
-There is no login on the web page, so keep it on your LAN and do not expose it to the
+There is no login on the web page, and the Settings panel can repoint the app at any
+Ollama, Sink or printer address, so keep it on your LAN and do not expose it to the
 internet.
