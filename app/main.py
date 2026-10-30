@@ -1,13 +1,14 @@
 import io
 import json
 import logging
+import os
 import threading
 import time
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from . import config, feeds, printer, render, services
+from . import config, feeds, printer, render, scheduler, services
 
 app = Flask(__name__)
 logging.basicConfig(
@@ -112,9 +113,12 @@ def stack(imgs, gap=40):
     return out
 
 
-def run_job(reprint, dry_run):
+def run_job(reprint, dry_run, source="button"):
     t0 = time.time()
-    log.info("job started (reprint=%s dry_run=%s, layout=%s)", reprint, dry_run, config.PRINT_MODE)
+    log.info("job started by %s (reprint=%s dry_run=%s, layout=%s)", source, reprint, dry_run, config.PRINT_MODE)
+    if source == "schedule":
+        say("scheduled run")
+    outcome = {"ok": True, "text": "nothing new to print"}
     try:
         items = build_items(reprint)
         if not items:
@@ -135,11 +139,15 @@ def run_job(reprint, dry_run):
         printer.send(imgs)
         _remember(i["id"] for i in items)  # only after the whole send succeeded
         say(f"printed {len(items)} stories as {len(imgs)} printout(s)")
+        outcome["text"] = f"printed {len(items)} stories"
     except Exception as e:
         log.exception("job failed")
         say(f"ERROR: {e}")
+        outcome = {"ok": False, "text": f"ERROR: {e}"}
     finally:
         log.info("job finished in %.1fs", time.time() - t0)
+        if not dry_run:
+            state["last_run"] = {**outcome, "at": time.time(), "source": source}
         state["running"] = False
         state["finished"] = time.time()
 
@@ -149,16 +157,22 @@ def index():
     return render_template("index.html")
 
 
-@app.post("/print")
-def start():
+def start_job(reprint=False, dry_run=False, source="button"):
+    """Start a print job in the background. Returns False if one is already running."""
     with _lock:
         if state["running"]:
-            return jsonify(error="already running"), 409
+            return False
         state.update(running=True, log=[], finished=None, preview=None)
+    threading.Thread(target=run_job, args=(reprint, dry_run, source), daemon=True).start()
+    return True
+
+
+@app.post("/print")
+def start():
     body = request.get_json(silent=True) or {}
     log.info("print requested from %s", request.remote_addr)
-    threading.Thread(target=run_job, args=(bool(body.get("reprint")), bool(body.get("dry_run"))),
-                     daemon=True).start()
+    if not start_job(bool(body.get("reprint")), bool(body.get("dry_run"))):
+        return jsonify(error="already running"), 409
     return jsonify(ok=True)
 
 
@@ -210,6 +224,8 @@ FORM_KEYS = {
     "printer_hold": "PRINTER_HOLD_SECONDS", "sink_expiry": "SINK_EXPIRY_DAYS",
     "feeds": "FEEDS", "items_per_feed": "ITEMS_PER_FEED", "max_age": "MAX_AGE_HOURS",
     "max_stories": "MAX_STORIES", "print_mode": "PRINT_MODE",
+    "schedule_enabled": "SCHEDULE_ENABLED", "schedule_times": "SCHEDULE_TIMES",
+    "schedule_days": "SCHEDULE_DAYS", "schedule_timezone": "SCHEDULE_TIMEZONE",
 }
 
 
@@ -219,6 +235,11 @@ def current_settings():
     out["overridden"] = list(config.OVERRIDDEN)
     out["feeds"] = "\n".join(config.FEEDS)  # textarea: one URL per line
     out["feeds_count"] = len(config.FEEDS)
+    out["schedule_times"] = ", ".join(config.SCHEDULE_TIMES)
+    out["schedule"] = scheduler.describe()
+    last = state.get("last_run")
+    out["last_run"] = (f"{time.strftime('%a %d %b %H:%M', time.localtime(last['at']))} "
+                       f"({last['source']}): {last['text']}") if last else None
     return out
 
 
@@ -242,11 +263,19 @@ def save_settings():
         return jsonify(error=str(e)), 400
     if state["running"]:
         return jsonify(error="a print job is running; try again when it finishes"), 409
+    eff = {k: clean.get(k, getattr(config, k)) for k in ("SCHEDULE_ENABLED", "SCHEDULE_TIMES", "SCHEDULE_DAYS")}
+    if eff["SCHEDULE_ENABLED"] and not eff["SCHEDULE_TIMES"]:
+        return jsonify(error="add at least one time to turn the schedule on"), 400
+    if eff["SCHEDULE_ENABLED"] and not eff["SCHEDULE_DAYS"]:
+        return jsonify(error="pick at least one day to turn the schedule on"), 400
+    schedule_changed = any(k.startswith("SCHEDULE_") and clean[k] != getattr(config, k) for k in clean)
     try:
         config.save_overrides(clean)
     except OSError as e:
         log.exception("could not save settings")
         return jsonify(error=f"could not write {config.settings_path()}: {e}"), 500
+    if schedule_changed:
+        scheduler.skip_past_slots()  # editing the schedule must not fire a time that already passed today
     log.info("settings saved from %s: %s", request.remote_addr,
              ", ".join(f"{k}={'***' if k == 'SINK_TOKEN' else v}" for k, v in clean.items()))
     return jsonify(current_settings())
@@ -308,3 +337,17 @@ def test_feeds():
             log.error("feed test: %s: %s", url, e)
             lines.append(f"FAIL  {url}\n      {e}")
     return jsonify(message="\n".join(lines)) if not bad else (jsonify(error="\n" + "\n".join(lines)), 502)
+
+
+@app.post("/api/test/schedule")
+def test_schedule():
+    """Describe what the saved schedule will do (nothing is printed)."""
+    d = scheduler.describe()
+    if not d["enabled"]:
+        return jsonify(message=f"Schedule is OFF. (It is {d['now']} in {d['timezone']}.)")
+    nxt = "\n".join("  " + n for n in d["next"]) or "  (no upcoming runs: check the days)"
+    return jsonify(message=f"Schedule is ON. It is {d['now']} in {d['timezone']}. Next runs:\n{nxt}")
+
+
+if os.environ.get("SCHEDULER", "1") != "0":
+    scheduler.start(lambda: start_job(source="schedule"))
