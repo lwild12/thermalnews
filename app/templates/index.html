@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thermal News</title>
+<style>
+ body{font-family:system-ui,sans-serif;max-width:640px;margin:2rem auto;padding:0 1rem;color:#222}
+ button{font-size:1.2rem;padding:.8rem 1.4rem;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
+ button:disabled{opacity:.5} button.alt{background:#666;font-size:.9rem;padding:.5rem .9rem}
+ pre{background:#f4f4f4;padding:1rem;border-radius:8px;min-height:6rem;white-space:pre-wrap}
+ img{max-width:100%;border:1px solid #ccc} small{color:#666}
+</style></head><body>
+<h1>Thermal News</h1>
+<p><small>{{ feeds|length }} feeds · model {{ model }} · printer {{ printer }}</small></p>
+<p><button id="go">Print the news</button>
+ <button class="alt" id="dry">Preview only</button>
+ <button class="alt" id="test">Test print</button></p>
+<label><input type="checkbox" id="reprint"> include stories already printed</label>
+<pre id="log">Idle.</pre>
+<img id="pv" hidden>
+<script>
+const $=id=>document.getElementById(id);
+async function start(dry){
+  const r=await fetch('/print',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({reprint:$('reprint').checked,dry_run:dry})});
+  if(!r.ok){$('log').textContent=(await r.json()).error;return}
+  $('pv').hidden=true; poll();
+}
+async function poll(){
+  const s=await (await fetch('/status')).json();
+  $('log').textContent=s.log.join('\n')||'Working...';
+  ['go','dry','test'].forEach(i=>$(i).disabled=s.running);
+  if(s.running) setTimeout(poll,1000);
+  else if(s.has_preview){$('pv').src='/preview.png?'+Date.now();$('pv').hidden=false}
+}
+$('go').onclick=()=>start(false); $('dry').onclick=()=>start(true);
+$('test').onclick=async()=>{const r=await fetch('/test',{method:'POST'});
+  $('log').textContent=r.ok?'Test sent.':'Test failed: '+(await r.json()).error};
+poll();
+</script></body></html>
