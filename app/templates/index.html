@@ -118,6 +118,9 @@
     <div><label for="printer_delay">Pause (ms)</label><input id="printer_delay" type="number" min="0" max="1000"></div>
     <div><label for="printer_hold">Hold open (s)</label><input id="printer_hold" type="number" min="0" max="120"></div>
    </div>
+   <label for="printer_stall">Give up if the printer takes no data for (s)</label>
+   <input id="printer_stall" type="number" min="5" max="600">
+   <p><small>The printer stops reading while it prints and cuts, so this should be generous.</small></p>
   </details>
   <div class="actions"><button class="alt" data-test="printer">Save &amp; test print</button></div>
   <p class="msg" id="msg-printer"></p>
@@ -133,7 +136,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const FIELDS=['qr_module','schedule_times','schedule_timezone','print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
+const FIELDS=['printer_stall','qr_module','schedule_times','schedule_timezone','print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
 
 async function api(path,body){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});

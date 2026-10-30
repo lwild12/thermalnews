@@ -87,7 +87,8 @@ Settings:
 | `PRINTER_WIDTH_DOTS` | 576 | 576 for 80mm at 203dpi |
 | `QR_MODULE_DOTS` | 4 | size of each QR square in printer dots; 4 gives a code about 14mm wide (3 is smaller but less reliable, 2 won't scan) |
 | `PRINTER_CHUNK_BYTES` / `PRINTER_CHUNK_DELAY_MS` | 512 / 15 | send in chunks of this size with this pause between them |
-| `PRINTER_HOLD_SECONDS` | 5 | keep the connection open this long after sending |
+| `PRINTER_HOLD_SECONDS` | 5 | keep the connection open this long after the printer has taken everything |
+| `PRINTER_STALL_SECONDS` | 60 | fail the job only if the printer takes no data at all for this long (it stops reading while it prints and cuts) |
 | `OLLAMA_URL` | http://localhost:11434 | Ollama base URL (use the real IP from inside Docker) |
 | `OLLAMA_MODEL` | llama3.2 | model to summarise with |
 | `SINK_URL` / `SINK_TOKEN` | - | Sink base URL and site token; if unset the full URL is used |
@@ -198,6 +199,7 @@ Keep it to one worker; job state is held in memory. The variables are the same a
 |---|---|
 | "Test print" fails with connection refused/timeout (see also `docker compose logs`) | wrong `PRINTER_HOST`, printer asleep/offline, or it does not accept raw 9100 (step 2) |
 | "Test print" says it sent but nothing prints | the printer accepted the connection but did not understand it: pick the other protocol in the drop-down next to the button and try again |
+| Job fails with `the printer stopped accepting data for 60s after N of M bytes` | the printer is offline, out of paper, has its cover open or is jammed; fix that and press the button again (nothing was marked as printed). Slow printers are fine: it only fails if nothing is taken for the whole stall time |
 | Prints part of the receipt, then stops (maybe with a few specks) | the printer is losing data. In Settings > Printer > Advanced, lower the chunk size (e.g. 256), raise the pause (e.g. 30 ms) and the hold time, then test again. If the log says `printer closed the connection after N of M bytes`, the printer hung up by itself |
 | Prints garbage or a long strip of symbols | wrong `PRINTER_PROTOCOL`; try the other one |
 | Blank paper or text too small/wide | check `PRINTER_WIDTH_DOTS` matches your paper/model |

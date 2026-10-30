@@ -127,7 +127,7 @@ def run_job(reprint, dry_run, source="button"):
         t1 = time.time()
         groups = group_receipts(items)
         imgs = [render.render_receipt(g, header=h, show_source=ss) for h, g, ss in groups]
-        say("receipts: " + "; ".join(f"{h.title()} ({len(g)} stories)" for h, g, _ in groups))
+        say("receipts: " + "; ".join(f"{h} ({len(g)} stories)" for h, g, _ in groups))
         log.info("rendered %d receipt(s) for %d stories in %.1fs", len(imgs), len(items), time.time() - t1)
         if dry_run:
             preview = stack(imgs)
@@ -221,7 +221,7 @@ FORM_KEYS = {
     "printer_host": "PRINTER_HOST", "printer_port": "PRINTER_PORT",
     "printer_protocol": "PRINTER_PROTOCOL", "printer_width": "PRINTER_WIDTH_DOTS",
     "printer_chunk": "PRINTER_CHUNK_BYTES", "printer_delay": "PRINTER_CHUNK_DELAY_MS",
-    "printer_hold": "PRINTER_HOLD_SECONDS", "sink_expiry": "SINK_EXPIRY_DAYS",
+    "printer_hold": "PRINTER_HOLD_SECONDS", "printer_stall": "PRINTER_STALL_SECONDS", "sink_expiry": "SINK_EXPIRY_DAYS",
     "feeds": "FEEDS", "items_per_feed": "ITEMS_PER_FEED", "max_age": "MAX_AGE_HOURS",
     "max_stories": "MAX_STORIES", "print_mode": "PRINT_MODE",
     "qr_module": "QR_MODULE_DOTS",
