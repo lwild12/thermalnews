@@ -1,4 +1,5 @@
 import logging
+import select
 import socket
 import time
 
@@ -41,23 +42,57 @@ def encode_escpos(img):
     return bytes(out)
 
 
+def _drain(sock, wait=0.0):
+    """Read anything the printer sends back. Returns False if it closed the connection."""
+    while select.select([sock], [], [], wait)[0]:
+        try:
+            data = sock.recv(4096)
+        except OSError as e:
+            log.warning("printer: read error: %s", e)
+            return False
+        if not data:
+            return False
+        log.info("printer: sent back %d bytes: %s", len(data), data[:32].hex(" "))
+        wait = 0.0
+    return True
+
+
 def send(img, protocol=None):
-    """Send img to the printer; returns (bytes_sent, protocol used)."""
+    """Send img to the printer; returns (bytes_sent, protocol used).
+
+    Data is paced (chunk size and delay are settings) and the connection is held
+    open afterwards, because some printer network boards lose data that arrives
+    faster than the head prints, or abort the job when the connection closes early.
+    """
     if not config.PRINTER_HOST:
         raise RuntimeError("PRINTER_HOST is not set")
     protocol = protocol or config.PRINTER_PROTOCOL
     payload = (encode_escpos if protocol == "escpos" else encode_starline)(img)
-    log.info("printer: encoded %dx%d image as %s, %d bytes; connecting to %s:%s",
-             img.size[0], img.size[1], protocol, len(payload), config.PRINTER_HOST, config.PRINTER_PORT)
+    chunk, delay = config.PRINTER_CHUNK_BYTES, config.PRINTER_CHUNK_DELAY_MS / 1000
+    log.info("printer: encoded %dx%d image as %s, %d bytes; connecting to %s:%s "
+             "(chunk %dB, delay %dms, hold %ds)", img.size[0], img.size[1], protocol, len(payload),
+             config.PRINTER_HOST, config.PRINTER_PORT, chunk, config.PRINTER_CHUNK_DELAY_MS,
+             config.PRINTER_HOLD_SECONDS)
     t0 = time.time()
     with socket.create_connection((config.PRINTER_HOST, config.PRINTER_PORT), timeout=10) as s:
         log.info("printer: connected in %.2fs, sending", time.time() - t0)
-        s.sendall(payload)
-        s.shutdown(socket.SHUT_WR)  # tell the printer there is no more data
-        s.settimeout(2)
-        try:
-            s.recv(1)  # give it a moment to drain before we close
-        except OSError:
-            pass
-    log.info("printer: sent %d bytes in %.2fs", len(payload), time.time() - t0)
+        sent, open_ = 0, True
+        for i in range(0, len(payload), chunk):
+            s.sendall(payload[i:i + chunk])
+            sent = min(i + chunk, len(payload))
+            if delay:
+                time.sleep(delay)
+            if not _drain(s):
+                open_ = False
+                log.error("printer: closed the connection after %d of %d bytes (%.1fs)",
+                          sent, len(payload), time.time() - t0)
+                raise RuntimeError(f"printer closed the connection after {sent} of {len(payload)} bytes")
+        log.info("printer: all %d bytes sent in %.2fs, holding connection open %ds",
+                 len(payload), time.time() - t0, config.PRINTER_HOLD_SECONDS)
+        end = time.time() + config.PRINTER_HOLD_SECONDS
+        while time.time() < end:
+            if not _drain(s, min(0.25, max(0.0, end - time.time()))):
+                log.info("printer: closed the connection %.1fs after the last byte", time.time() - (end - config.PRINTER_HOLD_SECONDS))
+                break
+    log.info("printer: finished in %.2fs", time.time() - t0)
     return len(payload), protocol

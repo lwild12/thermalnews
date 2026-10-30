@@ -170,6 +170,8 @@ FORM_KEYS = {
     "sink_url": "SINK_URL", "sink_token": "SINK_TOKEN",
     "printer_host": "PRINTER_HOST", "printer_port": "PRINTER_PORT",
     "printer_protocol": "PRINTER_PROTOCOL", "printer_width": "PRINTER_WIDTH_DOTS",
+    "printer_chunk": "PRINTER_CHUNK_BYTES", "printer_delay": "PRINTER_CHUNK_DELAY_MS",
+    "printer_hold": "PRINTER_HOLD_SECONDS",
 }
 
 
