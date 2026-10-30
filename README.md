@@ -91,9 +91,12 @@ Settings:
 | `OLLAMA_MODEL` | llama3.2 | model to summarise with |
 | `SINK_URL` / `SINK_TOKEN` | - | Sink base URL and site token; if unset the full URL is used |
 | `FEEDS` | BBC, Hacker News | comma-separated RSS/Atom URLs |
+| `PRINT_MODE` | per_feed | `per_feed` = one printout (cut between) per feed; `combined` = everything in one printout |
 | `ITEMS_PER_FEED` | 3 | newest N stories per feed |
 | `LOG_LEVEL` | INFO | `DEBUG` also logs skipped stories, raw Sink responses and summaries |
 | `MAX_AGE_HOURS` | 24 | ignore stories older than this |
+| `MAX_STORIES` | 0 | cap on total stories per press, 0 = no cap |
+| `SINK_EXPIRY_DAYS` | 7 | Sink links (including test links) expire after this many days, 0 = never |
 
 Note `localhost` inside a container is the container itself, so point `OLLAMA_URL` at
 the Ollama machine's LAN IP.
@@ -118,14 +121,21 @@ using, and you can also check with `docker compose exec thermalnews env | grep -
 
 ### 6. Use it
 
-**Settings** (the panel on the page) lets you change the Ollama URL and model, the Sink
-URL and token, and the printer IP, port, protocol and width without editing files or
-restarting. Each section has a **Save & test** button: Ollama checks the server is up and
+**Settings** (the panel on the page) lets you change the feeds, how many stories to print
+and the print layout, the Ollama URL and model, the Sink URL, token and link expiry, and
+the printer IP, port, protocol and width, without editing files or restarting. Each section has a **Save & test** button: Feeds fetches every feed and shows how many recent
+entries it has, Ollama checks the server is up and
 the model is pulled, Sink creates one real test link, and the printer sends a test page.
 Saved values go in `settings.json` inside the data volume (`./data`, file mode 600),
 and **override `.env`**; "Reset to .env values" deletes them. The Sink token is never sent
-back to the browser (leave the field blank to keep it). Feeds and the other options are
-still set in `.env`.
+back to the browser (leave the field blank to keep it).
+
+Each press prints the newest **new** stories from every feed (stories printed before are
+skipped, and skipped stories no longer count against the per-feed limit). By default each
+feed gets its own printout with a cut in between; choose "Everything in one printout" for a
+single combined one. Stories are only marked as printed once the whole job has been sent.
+If a press prints fewer stories than expected, the log says how many were skipped as
+already printed; tick "include stories already printed" to reprint them.
 
 - **Test print** sends a small test page to the printer.
 - **Preview only** runs the whole pipeline (feeds, Ollama, Sink) and shows the receipt

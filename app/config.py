@@ -12,6 +12,9 @@ FEEDS = _list(
 )
 ITEMS_PER_FEED = int(os.environ.get("ITEMS_PER_FEED", "3"))
 MAX_AGE_HOURS = int(os.environ.get("MAX_AGE_HOURS", "24"))
+# "per_feed": one printout (with its own cut) per feed; "combined": everything in one printout
+PRINT_MODE = os.environ.get("PRINT_MODE", "per_feed").lower()
+MAX_STORIES = int(os.environ.get("MAX_STORIES", "0"))  # total cap across all feeds, 0 = no cap
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
@@ -19,6 +22,7 @@ OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "180"))
 
 SINK_URL = os.environ.get("SINK_URL", "").rstrip("/")
 SINK_TOKEN = os.environ.get("SINK_TOKEN", "")
+SINK_EXPIRY_DAYS = int(os.environ.get("SINK_EXPIRY_DAYS", "7"))  # 0 = links never expire
 
 PRINTER_HOST = os.environ.get("PRINTER_HOST", "")
 PRINTER_PORT = int(os.environ.get("PRINTER_PORT", "9100"))
@@ -49,7 +53,8 @@ _log = logging.getLogger("thermalnews.config")
 
 EDITABLE = (
     "OLLAMA_URL", "OLLAMA_MODEL",
-    "SINK_URL", "SINK_TOKEN",
+    "SINK_URL", "SINK_TOKEN", "SINK_EXPIRY_DAYS",
+    "FEEDS", "ITEMS_PER_FEED", "MAX_AGE_HOURS", "MAX_STORIES", "PRINT_MODE",
     "PRINTER_HOST", "PRINTER_PORT", "PRINTER_PROTOCOL", "PRINTER_WIDTH_DOTS",
     "PRINTER_CHUNK_BYTES", "PRINTER_CHUNK_DELAY_MS", "PRINTER_HOLD_SECONDS",
 )
@@ -57,8 +62,11 @@ INT_RANGES = {
     "PRINTER_PORT": (1, 65535), "PRINTER_WIDTH_DOTS": (64, 2048),
     "PRINTER_CHUNK_BYTES": (16, 65536), "PRINTER_CHUNK_DELAY_MS": (0, 1000),
     "PRINTER_HOLD_SECONDS": (0, 120),
+    "SINK_EXPIRY_DAYS": (0, 3650), "ITEMS_PER_FEED": (1, 20),
+    "MAX_AGE_HOURS": (1, 720), "MAX_STORIES": (0, 100),
 }
-ENV_DEFAULTS = {k: globals()[k] for k in EDITABLE}
+MAX_FEEDS = 30
+ENV_DEFAULTS = {k: (list(globals()[k]) if k == "FEEDS" else globals()[k]) for k in EDITABLE}
 OVERRIDDEN = []  # keys currently coming from settings.json
 
 
@@ -80,6 +88,20 @@ def validate(raw):
             lo, hi = INT_RANGES[key]
             if not lo <= val <= hi:
                 raise ValueError(f"{key} must be between {lo} and {hi}")
+        elif key == "FEEDS":
+            items = val if isinstance(val, list) else str(val).replace(",", "\n").splitlines()
+            val = []
+            for url in (i.strip() for i in items):
+                if not url or url in val:
+                    continue
+                u = urlparse(url)
+                if u.scheme not in ("http", "https") or not u.netloc:
+                    raise ValueError(f"not a feed URL (needs http:// or https://): {url}")
+                val.append(url)
+            if not val:
+                raise ValueError("add at least one feed URL")
+            if len(val) > MAX_FEEDS:
+                raise ValueError(f"at most {MAX_FEEDS} feeds")
         else:
             val = str(val).strip()
         if key in ("OLLAMA_URL", "SINK_URL"):
@@ -90,6 +112,10 @@ def validate(raw):
                     raise ValueError(f"{key} must be a full http(s) URL, e.g. http://192.168.1.10:11434")
         if key == "OLLAMA_MODEL" and not val:
             raise ValueError("OLLAMA_MODEL is required")
+        if key == "PRINT_MODE":
+            val = val.lower()
+            if val not in ("per_feed", "combined"):
+                raise ValueError("PRINT_MODE must be per_feed or combined")
         if key == "PRINTER_PROTOCOL":
             val = val.lower()
             if val not in ("starline", "escpos"):

@@ -13,9 +13,10 @@
  fieldset{border:1px solid #ddd;border-radius:8px;margin:1rem 0;padding:.6rem 1rem 1rem}
  legend{font-weight:600;padding:0 .4rem}
  label{display:block;margin:.6rem 0 .2rem;font-size:.9rem;color:#444}
- input,select{width:100%;box-sizing:border-box;padding:.5rem;font-size:1rem;border:1px solid #bbb;border-radius:6px}
+ input,select,textarea{width:100%;box-sizing:border-box;padding:.5rem;font-size:1rem;border:1px solid #bbb;border-radius:6px}
+ textarea{font-family:ui-monospace,monospace;font-size:.85rem}
  .row{display:flex;gap:.8rem}.row>div{flex:1}
- .msg{min-height:1.2rem;font-size:.9rem;margin:.6rem 0 0;white-space:pre-wrap}
+ .msg{min-height:1.2rem;font-family:inherit;font-size:.9rem;margin:.6rem 0 0;white-space:pre-wrap}
  .ok{color:#0a6b2d}.err{color:#b00020}
  .actions{margin-top:.8rem;display:flex;gap:.5rem;flex-wrap:wrap}
 </style></head><body>
@@ -33,6 +34,24 @@
  <code>.env</code> values, with no restart needed. There is no login, so only expose this
  page on your own network.</small></p>
 
+ <fieldset><legend>Feeds &amp; stories</legend>
+  <label for="feeds">RSS / Atom feed URLs (one per line)</label>
+  <textarea id="feeds" rows="5" spellcheck="false" placeholder="https://feeds.bbci.co.uk/news/rss.xml"></textarea>
+  <div class="row">
+   <div><label for="items_per_feed">Stories per feed</label><input id="items_per_feed" type="number" min="1" max="20"></div>
+   <div><label for="max_stories">Total cap (0 = none)</label><input id="max_stories" type="number" min="0" max="100"></div>
+   <div><label for="max_age">Max age (hours)</label><input id="max_age" type="number" min="1" max="720"></div>
+  </div>
+  <label for="print_mode">Print layout</label>
+  <select id="print_mode">
+   <option value="per_feed">One printout per feed (cut between)</option>
+   <option value="combined">Everything in one printout</option>
+  </select>
+  <p><small>Each press prints the newest <em>new</em> stories from each feed, so stories printed before are skipped.</small></p>
+  <div class="actions"><button class="alt" data-test="feeds">Save &amp; test feeds</button></div>
+  <p class="msg" id="msg-feeds"></p>
+ </fieldset>
+
  <fieldset><legend>Ollama</legend>
   <label for="ollama_url">URL</label>
   <input id="ollama_url" placeholder="http://192.168.1.10:11434">
@@ -48,9 +67,11 @@
   <label for="sink_token">Site token <small id="token_state"></small></label>
   <input id="sink_token" type="password" autocomplete="new-password" placeholder="leave blank to keep the saved token">
   <label style="display:inline-block"><input type="checkbox" id="clear_sink_token" style="width:auto"> remove saved token</label>
+  <label for="sink_expiry">Link expiry (days, 0 = never)</label>
+  <input id="sink_expiry" type="number" min="0" max="3650">
   <div class="actions"><button class="alt" data-test="sink">Save &amp; test Sink</button></div>
   <p class="msg" id="msg-sink"></p>
-  <p><small>The test creates one real link (to example.com) in Sink.</small></p>
+  <p><small>The test creates one real link (to example.com) in Sink, with the expiry above.</small></p>
  </fieldset>
 
  <fieldset><legend>Printer</legend>
@@ -86,7 +107,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-const FIELDS=['ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
+const FIELDS=['print_mode','feeds','items_per_feed','max_stories','max_age','sink_expiry','ollama_url','ollama_model','sink_url','printer_host','printer_port','printer_protocol','printer_width','printer_chunk','printer_delay','printer_hold'];
 
 async function api(path,body){
   const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
@@ -99,7 +120,7 @@ function fill(s){
   FIELDS.forEach(f=>{ if(document.activeElement!==$(f)) $(f).value=s[f] });
   $('token_state').textContent=s.sink_token_set?'(a token is saved)':'(none saved)';
   $('sink_token').value=''; $('clear_sink_token').checked=false;
-  $('summary').textContent=s.feeds+(s.feeds===1?' feed':' feeds')+' · model '+s.ollama_model+' · printer '+(s.printer_host||'(not set)')+':'+s.printer_port+' ('+s.printer_protocol+')'
+  $('summary').textContent=s.feeds_count+(s.feeds_count===1?' feed':' feeds')+' · model '+s.ollama_model+' · printer '+(s.printer_host||'(not set)')+':'+s.printer_port+' ('+s.printer_protocol+')'
     +(s.overridden.length?' · settings saved in UI':'');
 }
 async function loadSettings(){fill(await (await fetch('/api/settings')).json())}

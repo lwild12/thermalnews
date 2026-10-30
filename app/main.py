@@ -56,13 +56,12 @@ def say(msg):
 
 def build_items(reprint=False):
     say(f"fetching {len(config.FEEDS)} feeds")
-    stories, errors = feeds.fetch_stories()
+    stories, errors, skipped = feeds.fetch_stories(set() if reprint else _seen())
     for e in errors:
         say(f"feed error: {e}")
-    if not reprint:
-        seen = _seen()
-        stories = [s for s in stories if s["id"] not in seen]
-    say(f"{len(stories)} stories to process")
+    if skipped:
+        say(f"skipped {skipped} stories already printed (tick 'include stories already printed' to reprint)")
+    say(f"{len(stories)} new stories to process")
     items = []
     for s in stories:
         try:
@@ -80,25 +79,51 @@ def build_items(reprint=False):
     return items
 
 
+def group_receipts(items):
+    """[(header, items, show_source)] - one per feed (in configured order) or one combined."""
+    if config.PRINT_MODE == "combined":
+        return [("NEWS DIGEST", items, True)]
+    order = {u: n for n, u in enumerate(config.FEEDS)}
+    groups = {}
+    for it in items:
+        groups.setdefault(it["feed"], []).append(it)
+    return [(g[0]["source"].upper(), g, False)
+            for _, g in sorted(groups.items(), key=lambda kv: order.get(kv[0], len(order)))]
+
+
+def stack(imgs, gap=40):
+    """One tall image for the browser preview, with a gap where the printer would cut."""
+    from PIL import Image
+    out = Image.new("1", (max(i.size[0] for i in imgs), sum(i.size[1] for i in imgs) + gap * (len(imgs) - 1)), 1)
+    y = 0
+    for i in imgs:
+        out.paste(i, (0, y)); y += i.size[1] + gap
+    return out
+
+
 def run_job(reprint, dry_run):
     t0 = time.time()
-    log.info("job started (reprint=%s dry_run=%s)", reprint, dry_run)
+    log.info("job started (reprint=%s dry_run=%s, layout=%s)", reprint, dry_run, config.PRINT_MODE)
     try:
         items = build_items(reprint)
         if not items:
             say("nothing new to print")
             return
         t1 = time.time()
-        img = render.render_receipt(items)
-        log.info("rendered receipt %dx%d for %d stories in %.1fs", img.size[0], img.size[1], len(items), time.time() - t1)
+        groups = group_receipts(items)
+        imgs = [render.render_receipt(g, header=h, show_source=ss) for h, g, ss in groups]
+        say("receipts: " + "; ".join(f"{h.title()} ({len(g)} stories)" for h, g, _ in groups))
+        log.info("rendered %d receipt(s) for %d stories in %.1fs", len(imgs), len(items), time.time() - t1)
         if dry_run:
-            img.save(Path(config.DATA_DIR) / "last.png") if Path(config.DATA_DIR).exists() else None
-            state["preview"] = img
+            preview = stack(imgs)
+            state["preview"] = preview
+            if Path(config.DATA_DIR).exists():
+                preview.save(Path(config.DATA_DIR) / "last.png")
             say("dry run complete - see preview")
             return
-        printer.send(img)
-        _remember(i["id"] for i in items)
-        say(f"printed {len(items)} stories")
+        printer.send(imgs)
+        _remember(i["id"] for i in items)  # only after the whole send succeeded
+        say(f"printed {len(items)} stories as {len(imgs)} printout(s)")
     except Exception as e:
         log.exception("job failed")
         say(f"ERROR: {e}")
@@ -171,7 +196,9 @@ FORM_KEYS = {
     "printer_host": "PRINTER_HOST", "printer_port": "PRINTER_PORT",
     "printer_protocol": "PRINTER_PROTOCOL", "printer_width": "PRINTER_WIDTH_DOTS",
     "printer_chunk": "PRINTER_CHUNK_BYTES", "printer_delay": "PRINTER_CHUNK_DELAY_MS",
-    "printer_hold": "PRINTER_HOLD_SECONDS",
+    "printer_hold": "PRINTER_HOLD_SECONDS", "sink_expiry": "SINK_EXPIRY_DAYS",
+    "feeds": "FEEDS", "items_per_feed": "ITEMS_PER_FEED", "max_age": "MAX_AGE_HOURS",
+    "max_stories": "MAX_STORIES", "print_mode": "PRINT_MODE",
 }
 
 
@@ -179,7 +206,8 @@ def current_settings():
     out = {form: getattr(config, key) for form, key in FORM_KEYS.items() if form != "sink_token"}
     out["sink_token_set"] = bool(config.SINK_TOKEN)  # the token itself never goes to the browser
     out["overridden"] = list(config.OVERRIDDEN)
-    out["feeds"] = len(config.FEEDS)
+    out["feeds"] = "\n".join(config.FEEDS)  # textarea: one URL per line
+    out["feeds_count"] = len(config.FEEDS)
     return out
 
 
@@ -253,4 +281,19 @@ def test_sink():
         short = services.shorten("https://example.com/thermalnews-test")
     except Exception as e:
         return jsonify(error=f"{config.SINK_URL}: {e}"), 502
-    return jsonify(message=f"Sink OK: created {short} (a test link now exists in Sink).")
+    exp = f"expires in {config.SINK_EXPIRY_DAYS} days" if config.SINK_EXPIRY_DAYS else "never expires"
+    return jsonify(message=f"Sink OK: created {short} ({exp}).")
+
+
+@app.post("/api/test/feeds")
+def test_feeds():
+    """Fetch every saved feed and report what is in it."""
+    lines, bad = [], 0
+    for url in config.FEEDS:
+        try:
+            lines.append(f"OK    {url}\n      {feeds.check(url)}")
+        except Exception as e:
+            bad += 1
+            log.error("feed test: %s: %s", url, e)
+            lines.append(f"FAIL  {url}\n      {e}")
+    return jsonify(message="\n".join(lines)) if not bad else (jsonify(error="\n" + "\n".join(lines)), 502)
