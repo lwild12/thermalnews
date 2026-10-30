@@ -4,6 +4,7 @@ import time
 from html import unescape
 
 import feedparser
+import requests
 
 from . import config
 
@@ -18,7 +19,14 @@ def fetch_stories():
     cutoff = time.time() - config.MAX_AGE_HOURS * 3600
     stories, errors = [], []
     for url in config.FEEDS:
-        parsed = feedparser.parse(url, agent="thermalnews/1.0")
+        try:
+            # feedparser has no timeout of its own, so fetch here
+            r = requests.get(url, timeout=(5, 15), headers={"User-Agent": "thermalnews/1.0"})
+            r.raise_for_status()
+        except requests.RequestException as e:
+            errors.append(f"{url}: {e}")
+            continue
+        parsed = feedparser.parse(r.content)
         if parsed.bozo and not parsed.entries:
             errors.append(f"{url}: {parsed.get('bozo_exception')}")
             continue

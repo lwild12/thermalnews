@@ -39,6 +39,7 @@ def say(msg):
 
 
 def build_items(reprint=False):
+    say(f"fetching {len(config.FEEDS)} feeds")
     stories, errors = feeds.fetch_stories()
     for e in errors:
         say(f"feed error: {e}")

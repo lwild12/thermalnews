@@ -101,7 +101,17 @@ Then start it:
 docker compose up -d --build
 ```
 
-Open `http://<box-ip>:8080`.
+Open `http://<box-ip>:8185` (the host port is set in `docker-compose.yml`).
+
+**Changed `.env` later?** `docker compose restart` does not re-read it. Recreate the
+container instead:
+
+```
+docker compose up -d --force-recreate
+```
+
+The line under the page title shows the model and printer the running container is
+using, and you can also check with `docker compose exec thermalnews env | grep -E 'PRINTER|OLLAMA'`.
 
 ### 6. Use it
 
