@@ -1,0 +1,17 @@
+services:
+  thermalnews:
+    build: .
+    ports: ["8080:8080"]
+    volumes: ["./data:/data"]
+    restart: unless-stopped
+    environment:
+      PRINTER_HOST: 192.168.1.50          # printer IP
+      PRINTER_PORT: 9100
+      PRINTER_PROTOCOL: starline          # or escpos
+      OLLAMA_URL: http://192.168.1.10:11434
+      OLLAMA_MODEL: llama3.2
+      SINK_URL: https://s.example.com
+      SINK_TOKEN: changeme                # your NUXT_SITE_TOKEN
+      FEEDS: https://feeds.bbci.co.uk/news/rss.xml,https://hnrss.org/frontpage
+      ITEMS_PER_FEED: 3
+      MAX_AGE_HOURS: 24
